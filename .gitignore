@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+backend/live-polling
+backend/*.exe
+coverage.out
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
