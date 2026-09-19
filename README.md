@@ -148,7 +148,87 @@ Votes require an `X-Voter-Key` browser/device key. The frontend generates and st
 
 ## Deployment
 
-The frontend can be deployed to a static hosting provider, and the Go backend can be deployed as a container or managed service. Configure the frontend API/WebSocket URLs to point at the deployed backend, and provide hosted MongoDB and Redis connection URLs through server environment variables. Production deployment instructions, CORS configuration, TLS requirements, and health checks will be documented with the completed implementation.
+### Render Free Deployment
+
+Render does not provide MongoDB or Redis in this setup, so deploy the application as:
+
+- One Render Web Service for the Go backend
+- One Render Static Site for the Vite frontend
+- MongoDB Atlas for persistent data
+- A managed Redis provider such as Redis Cloud or Upstash
+
+#### 1. Create MongoDB Atlas
+
+1. Create a free MongoDB Atlas cluster and a database user.
+2. Add `0.0.0.0/0` to the Atlas network access list. Render's free outbound IP address is not fixed.
+3. Copy the TLS connection string. It will be used as `MONGODB_URI`.
+
+#### 2. Create a managed Redis database
+
+Create a free Redis database with Redis Cloud, Upstash, or another provider. Copy its connection URL for `REDIS_URL`. Use the provider's TLS URL, usually starting with `rediss://`, when one is available.
+
+#### 3. Deploy the backend Web Service
+
+1. Push this repository to GitHub and select it in the Render dashboard.
+2. Create **New > Web Service**.
+3. Set **Root Directory** to `backend`.
+4. Set **Runtime** to **Docker**. Render will use `backend/Dockerfile`.
+5. Select the **Free** instance type.
+6. Set the health check path to `/api/health`.
+7. Add these environment variables:
+
+  ```text
+  MONGODB_URI=<MongoDB Atlas connection string>
+  MONGODB_DATABASE=live_polling
+  REDIS_URL=<managed Redis connection string>
+  JWT_SECRET=<long random secret>
+  FRONTEND_URL=https://<frontend-service>.onrender.com
+  ```
+
+  Do not hard-code `PORT`; Render supplies it automatically. Do not use the local Docker hostnames `mongodb` or `redis` in the hosted connection strings.
+
+8. Deploy the service and copy its URL, for example `https://live-polling-api.onrender.com`.
+9. Confirm that `https://<backend-service>.onrender.com/api/health` returns status `200`. The health check returns `503` until both MongoDB and Redis are reachable.
+
+#### 4. Deploy the frontend Static Site
+
+1. Create **New > Static Site** in Render and select the same repository.
+2. Set **Root Directory** to `frontend`.
+3. Set the build command to `npm ci && npm run build`.
+4. Set the publish directory to `dist`.
+5. Add these environment variables using the backend URL from the previous step:
+
+  ```text
+  VITE_API_URL=https://<backend-service>.onrender.com
+  VITE_WS_URL=wss://<backend-service>.onrender.com
+  ```
+
+6. Add a rewrite rule so React Router works when a public poll URL is opened directly:
+
+  ```text
+  Source: /*
+  Destination: /index.html
+  Action: Rewrite
+  ```
+
+7. Deploy the site and copy its URL.
+
+#### 5. Connect CORS and WebSockets
+
+Update the backend `FRONTEND_URL` environment variable to the exact frontend URL, without a trailing slash, for example:
+
+```text
+FRONTEND_URL=https://live-polling-web.onrender.com
+```
+
+Redeploy the backend after changing it. The frontend must use `https://` for REST requests and `wss://` for WebSockets. The backend WebSocket endpoint is `/ws/polls/:pollId`.
+
+#### Free-tier notes
+
+- Render free services sleep after inactivity, so the first request may be slow.
+- WebSocket connections can close when the backend sleeps or restarts; the public poll page should be refreshed if that happens.
+- Keep MongoDB and Redis outside Render so their data is not tied to the Render service lifecycle.
+- Never commit `.env` files, database URLs, or `JWT_SECRET` to the repository.
 
 ## Security Decisions
 

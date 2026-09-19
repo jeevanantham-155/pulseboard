@@ -27,7 +27,7 @@ const shutdownTimeout = 10 * time.Second
 func main() {
 	applicationConfig, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "configuration load failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -35,7 +35,7 @@ func main() {
 	mongoClient, err := mongodb.Connect(startupContext, applicationConfig.MongoDBURI, applicationConfig.MongoDBDatabase)
 	if err != nil {
 		cancel()
-		fmt.Fprintln(os.Stderr, "mongodb startup check failed")
+		fmt.Fprintf(os.Stderr, "mongodb startup check failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		_ = mongoClient.Disconnect(context.Background())
 		cancel()
-		fmt.Fprintln(os.Stderr, "redis startup check failed")
+		fmt.Fprintf(os.Stderr, "redis startup check failed: %v\n", err)
 		os.Exit(1)
 	}
 	cancel()
@@ -53,13 +53,13 @@ func main() {
 	indexContext, indexCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	if err := userRepository.EnsureIndexes(indexContext); err != nil {
 		indexCancel()
-		fmt.Fprintln(os.Stderr, "mongodb index setup failed")
+		fmt.Fprintf(os.Stderr, "mongodb user index setup failed: %v\n", err)
 		os.Exit(1)
 	}
 	voteRepository := repository.NewVoteRepository(mongoClient.Database())
 	if err := voteRepository.EnsureIndexes(indexContext); err != nil {
 		indexCancel()
-		fmt.Fprintln(os.Stderr, "mongodb vote index setup failed")
+		fmt.Fprintf(os.Stderr, "mongodb vote index setup failed: %v\n", err)
 		os.Exit(1)
 	}
 	indexCancel()
